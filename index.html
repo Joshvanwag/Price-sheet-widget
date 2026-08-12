@@ -69,7 +69,7 @@
 		// v2 SDK has no init() method, but getQueryParams IS promise-based
 		ZOHO.CREATOR.UTIL.getQueryParams().then(function (queryParams) {
 			console.log("queryParams:", queryParams);
-			priceSheetID = queryParams.ID;
+			priceSheetID = queryParams.RecordID;
 			console.log("priceSheetID:", priceSheetID);
 
 			fetchRecordAndShowPrompts();
