@@ -86,9 +86,8 @@
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
 
-						var totalInstallHours = parseFloat(record.Total_Install_Hours) || 0;
-						var totalProgrammingHours = parseFloat(record.Total_Programming_Hours) || 0;
-						var totalHours = totalInstallHours + totalProgrammingHours;
+						// Total_Install_Hours already includes programming hours - don't add Programming_Hours again
+						var totalHours = parseFloat(record.Total_Install_Hours) || 0;
 
 						isEdit = !!(record.CRM_Install_Price_Sheet_ID && record.CRM_Install_Price_Sheet_ID !== "");
 
