@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<script src="https://js.zohostatic.com/creator/widgets/version/2.0/widgetsdk-min.js"></script>
+</head>
+<body>
+	<div id="loading">Syncing to CRM and attaching PDF...</div>
+	<div id="promptArea" style="display:none;"></div>
+	<div id="errorArea" style="display:none; color:red;"></div>
+
+	<script>
+		let priceSheetID = null;
+
+		ZOHO.CREATOR.init().then(function(){
+			// Grab the record ID passed in via the widget URL param
+			var params = new URLSearchParams(window.location.search);
+			priceSheetID = params.get("ID");
+
+			runSync();
+		});
+
+		function runSync() {
+			var config = {
+				customfunction_name: "Sync_Install_Price_Sheet_And_PDF",
+				params: {
+					priceSheetID: priceSheetID
+				}
+			};
+
+			ZOHO.CREATOR.UTIL.invokeCustomFunction(config)
+				.then(function(response){
+					document.getElementById("loading").style.display = "none";
+
+					// response.code === 3000 is Creator's "success" convention
+					// Your function's return Map (crmSyncSuccess, crmInstallPriceSheetID)
+					// comes back inside response.output or response.result depending on SDK version — log it once to confirm shape
+					var result = response.output || response.result || response;
+
+					if (result.crmSyncSuccess === true || result.crmSyncSuccess === "true") {
+						showPrompts(result);
+					} else {
+						showError("CRM sync did not complete. Please check the record.");
+					}
+				})
+				.catch(function(err){
+					document.getElementById("loading").style.display = "none";
+					showError("Something went wrong calling the sync function.");
+					console.error(err);
+				});
+		}
+
+		function showPrompts(result) {
+			var promptArea = document.getElementById("promptArea");
+			promptArea.style.display = "block";
+			// TODO: build your actual prompts UI here
+			promptArea.innerHTML = "<p>Synced successfully. CRM ID: " + result.crmInstallPriceSheetID + "</p>";
+		}
+
+		function showError(msg) {
+			var errorArea = document.getElementById("errorArea");
+			errorArea.style.display = "block";
+			errorArea.innerText = msg;
+		}
+	</script>
+</body>
+</html>
