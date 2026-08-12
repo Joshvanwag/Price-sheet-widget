@@ -141,15 +141,18 @@
 
 		function runSync(slaSelection, updateMode) {
 			var config = {
-				customfunction_name: "Sync_Install_Price_Sheet_And_PDF",
-				params: {
+				api_name: "Sync_Price_Sheet_API",
+				workspace_name: "tvspro",
+				http_method: "POST",
+				content_type: "application/json",
+				payload: {
 					priceSheetID: priceSheetID,
 					slaSelection: slaSelection,
 					updateMode: updateMode
 				}
 			};
 
-			ZOHO.CREATOR.UTIL.invokeCustomFunction(config)
+			ZOHO.CREATOR.DATA.invokeCustomApi(config)
 				.then(function (response) {
 					document.getElementById("loading").style.display = "none";
 					console.log("Sync response:", response);
