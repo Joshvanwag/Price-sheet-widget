@@ -66,27 +66,27 @@
 			"Platinum": 0.14
 		};
 
-		// v2 SDK has no init() method - call API methods directly
-		var queryParams = ZOHO.CREATOR.UTIL.getQueryParams();
-		priceSheetID = queryParams.ID;
+		// v2 SDK has no init() method, but getQueryParams IS promise-based
+		ZOHO.CREATOR.UTIL.getQueryParams().then(function (queryParams) {
+			console.log("queryParams:", queryParams);
+			priceSheetID = queryParams.ID;
+			console.log("priceSheetID:", priceSheetID);
 
-		console.log("queryParams:", queryParams);
-		console.log("priceSheetID:", priceSheetID);
-
-		fetchRecordAndShowPrompts();
+			fetchRecordAndShowPrompts();
+		});
 
 		function fetchRecordAndShowPrompts() {
 			// TODO: confirm appName/reportName match your actual app - these
 			// are carried over from the record-summary URL used elsewhere
 			var config = {
-				appName: "application-by-chris",
-				reportName: "All_Price_Sheets",
+				app_name: "application-by-chris",
+				report_name: "All_Price_Sheets",
 				id: priceSheetID
 			};
 
 			console.log("config being sent:", config);
 
-			ZOHO.CREATOR.API.getRecordById(config)
+			ZOHO.CREATOR.DATA.getRecordById(config)
 				.then(function (response) {
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
