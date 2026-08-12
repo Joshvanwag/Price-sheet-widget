@@ -1,0 +1,408 @@
+// ==========================================================
+// STANDALONE FUNCTION: Sync_Install_Price_Sheet_And_PDF
+// Params:
+//   priceSheetID (BigInt/Number) - the Price_Sheet record ID
+//   slaSelection (String)        - "Bronze" | "Silver" | "Gold" | "Platinum" | ""
+//   updateMode (String)          - "cost_and_price" | "cost_only" | "" (create)
+// Returns: Map with crmSyncSuccess, crmInstallPriceSheetID
+// ==========================================================
+
+priceSheetRecord = Price_Sheet[ID == priceSheetID];
+
+crmData = Map();
+optionsMap = Map();
+getOptions = Map();
+crmSyncSuccess = false;
+crmInstallPriceSheetID = "";
+creatorRecordURL = "https://creatorapp.zoho.com/tvspro/application-by-chris/record-summary/All_Price_Sheets/" + priceSheetID;
+
+// updateMode governs whether sell-price fields get pushed.
+// Create flow always passes "" -> treated as full update (both cost & price).
+updatePrice = (updateMode != "cost_only");
+
+// Basic information
+crmData.put("Name",ifnull(priceSheetRecord.Project_Name,""));
+crmData.put("Creator_Record_ID",priceSheetID.toString());
+crmData.put("Creator_Record_Link",creatorRecordURL);
+
+// Set Josh VanWagenen as owner
+ownerData = Map();
+ownerData.put("id","5439147000079827001");
+crmData.put("Owner",ownerData);
+
+// Deal lookup
+if(priceSheetRecord.Deal_Name != null && priceSheetRecord.Deal_Name != "")
+{
+	crmData.put("Deal_Name",priceSheetRecord.Deal_Name.toLong());
+}
+
+// Sales Quote lookup
+if(priceSheetRecord.CRM_Sales_Quote_ID != null && priceSheetRecord.CRM_Sales_Quote_ID != "")
+{
+	crmData.put("Sales_Quote_Lookup",priceSheetRecord.CRM_Sales_Quote_ID.toLong());
+}
+
+// Date
+if(priceSheetRecord.Date_field != null)
+{
+	crmData.put("Date",priceSheetRecord.Date_field);
+}
+
+// ZIP code
+if(priceSheetRecord.Project_Zip_Code != null)
+{
+	zipRecord = Zipcodes[ID == priceSheetRecord.Project_Zip_Code];
+	if(zipRecord.ID != null)
+	{
+		crmData.put("Zip_Code",zipRecord.Zip_Code);
+	}
+}
+
+// Pricing - cost fields always sync regardless of updateMode
+crmData.put("Install_Line_Item_Cost",ifnull(priceSheetRecord.Install_Line_Item_Cost,0));
+crmData.put("Job_Review_Training_Cost",ifnull(priceSheetRecord.Job_Review_Training_Cost,0));
+crmData.put("Project_Management_Cost",ifnull(priceSheetRecord.Project_Management_Cost,0));
+crmData.put("Drive_Time_Cost",ifnull(priceSheetRecord.Drive_Time_Cost,0));
+crmData.put("Design_Fee",ifnull(priceSheetRecord.Design_Fee,0));
+crmData.put("Admin_Expenses_Total",ifnull(priceSheetRecord.Admin_Expenses,0));
+crmData.put("Out_of_Town_Job_Cost",ifnull(priceSheetRecord.Out_of_Town_Job_Cost,0));
+
+// Sell-price fields - only pushed when updatePrice is true
+if(updatePrice == true)
+{
+	crmData.put("Total_MSRP",ifnull(priceSheetRecord.Sale_Price,0));
+	crmData.put("State_Contract_MSRP",ifnull(priceSheetRecord.State_Contract_MSRP,0));
+}
+
+// Hours
+crmData.put("Total_Install_Hours",ifnull(priceSheetRecord.Total_Install_Hours,0));
+crmData.put("Drive_Time_Hours",ifnull(priceSheetRecord.Drive_Time,0));
+crmData.put("Project_Management_Hours",ifnull(priceSheetRecord.Project_Management_Hours,0));
+crmData.put("Job_Review_Training_Hours",ifnull(priceSheetRecord.Job_Review_Training,0));
+crmData.put("Warranty_Hours",ifnull(priceSheetRecord.Warranty_Hours,0));
+crmData.put("Tier_1_Hours",ifnull(priceSheetRecord.Tier_1_Hours,0));
+crmData.put("Tier_2_Hours",ifnull(priceSheetRecord.Tier_2_Hours,0));
+
+// Tier 1 hours
+crmData.put("Tier_1_Video_Hours",ifnull(priceSheetRecord.T1_Video_Hours,0));
+crmData.put("Tier_1_Audio_Hours",ifnull(priceSheetRecord.T1_Audio_Hours,0));
+crmData.put("Tier_1_Cabling_Hours",ifnull(priceSheetRecord.T1_Cabling_Hours,0));
+crmData.put("Tier_1_Component_Hours",ifnull(priceSheetRecord.T1_Component_Hours,0));
+
+// Tier 2 hours
+crmData.put("Tier_2_Video_Hours",ifnull(priceSheetRecord.T2_Video_Hours,0));
+crmData.put("Tier_2_Audio_Hours",ifnull(priceSheetRecord.T2_Audio_Hours,0));
+crmData.put("Tier_2_Cabling_Hours",ifnull(priceSheetRecord.T2_Cabling_Hours,0));
+crmData.put("Tier_2_Component_Hours",ifnull(priceSheetRecord.T2_Component_Hours,0));
+
+// Programming hours
+crmData.put("Programming_Hours",ifnull(priceSheetRecord.Programming_Hours,0));
+crmData.put("T2_Programming_Hours",ifnull(priceSheetRecord.T2_Programming_Hours,0));
+crmData.put("Tier_3_Programming_Hours",ifnull(priceSheetRecord.T3_Programming_Hours,0));
+
+// Install line-item subform
+crmInstallLines = List();
+for each lineRow in priceSheetRecord.Line_Item_Lookup
+{
+	taskRecord = Install_Line_Items[ID == lineRow.Install_Line_Items_Hours_Cost];
+	lineData = Map();
+	lineData.put("Install_Line_Item",ifnull(taskRecord.Install_Line_Name,""));
+	lineData.put("Quantity",ifnull(lineRow.Quantity,0));
+	lineData.put("Line_Item_Total_Cost",ifnull(lineRow.Line_Item_Total_Cost,0));
+	crmInstallLines.add(lineData);
+}
+crmData.put("Install_Line_Items",crmInstallLines);
+
+// Create a new CRM Install Price Sheet, or update the existing one if already linked
+if(priceSheetRecord.CRM_Install_Price_Sheet_ID != null && priceSheetRecord.CRM_Install_Price_Sheet_ID != "")
+{
+	existingCRMID = priceSheetRecord.CRM_Install_Price_Sheet_ID.toLong();
+	crmResponse = zoho.crm.updateRecord("Install_Price_Sheets",existingCRMID,crmData,optionsMap,"zohocrm_connection");
+	info "CRM Install Price Sheet Update Response:";
+	info crmResponse;
+	if(crmResponse.get("id") != null)
+	{
+		crmSyncSuccess = true;
+		crmInstallPriceSheetID = existingCRMID.toString();
+	}
+}
+else
+{
+	crmResponse = zoho.crm.createRecord("Install_Price_Sheets",crmData,optionsMap,"zohocrm_connection");
+	info "CRM Install Price Sheet Create Response:";
+	info crmResponse;
+	if(crmResponse.get("id") != null)
+	{
+		crmSyncSuccess = true;
+		newCRMInstallPriceSheetID = crmResponse.get("id").toString();
+		crmInstallPriceSheetID = newCRMInstallPriceSheetID;
+		update Price_Sheet[ID == priceSheetID]
+		[
+			CRM_Install_Price_Sheet_ID=newCRMInstallPriceSheetID
+		];
+	}
+}
+
+// Push Install and Programming hours to the linked Deal
+if(crmSyncSuccess == true && priceSheetRecord.Deal_Name != null && priceSheetRecord.Deal_Name != "")
+{
+	dealID = priceSheetRecord.Deal_Name.toLong();
+	dealHoursData = Map();
+	dealHoursData.put("Installation_Hours",ifnull(priceSheetRecord.Installation_Hours_Allocated,0));
+	dealHoursData.put("Programming_Hours",ifnull(priceSheetRecord.Programming_Hours_Allocated,0));
+	dealHoursUpdateResponse = zoho.crm.updateRecord("Deals",dealID,dealHoursData,optionsMap,"zohocrm_connection");
+	info "Deal Hours Update Response:";
+	info dealHoursUpdateResponse;
+}
+
+// Add or update Install line + SLA line on Sales Quote
+if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && priceSheetRecord.CRM_Sales_Quote_ID != "")
+{
+	quoteID = priceSheetRecord.CRM_Sales_Quote_ID.toLong();
+	installProductID = "5439147000006666817";
+	installUnitCost = ifnull(priceSheetRecord.Admin_Expenses,0) + ifnull(priceSheetRecord.Install_Line_Item_Cost,0);
+	installListPrice = ifnull(priceSheetRecord.Sale_Price,0);
+	quoteRecord = zoho.crm.getRecordById("Quotes",quoteID,getOptions,"zohocrm_connection");
+	updatedProductDetails = List();
+	installLineFound = false;
+	if(quoteRecord.get("Product_Details") != null)
+	{
+		for each existingQuoteLine in quoteRecord.get("Product_Details")
+		{
+			quoteLine = Map();
+			existingProduct = existingQuoteLine.get("product");
+			if(existingQuoteLine.get("id") != null)
+			{
+				quoteLine.put("id",existingQuoteLine.get("id"));
+			}
+			if(existingProduct != null && existingProduct.get("id") != null)
+			{
+				productData = Map();
+				productData.put("id",existingProduct.get("id"));
+				quoteLine.put("product",productData);
+			}
+			quoteLine.put("quantity",ifnull(existingQuoteLine.get("quantity"),1));
+			quoteLine.put("list_price",ifnull(existingQuoteLine.get("list_price"),0));
+			if(existingQuoteLine.get("Discount") != null)
+			{
+				quoteLine.put("Discount",existingQuoteLine.get("Discount"));
+			}
+			if(existingQuoteLine.get("product_description") != null)
+			{
+				quoteLine.put("product_description",existingQuoteLine.get("product_description"));
+			}
+			if(existingProduct != null && existingProduct.get("id") != null && existingProduct.get("id").toString() == installProductID)
+			{
+				quoteLine.put("quantity",1);
+				// Only overwrite the sell price on the Install line if updatePrice is true.
+				// On cost_only edits, leave the existing list_price alone.
+				if(updatePrice == true)
+				{
+					quoteLine.put("list_price",installListPrice);
+				}
+				installLineFound = true;
+			}
+			updatedProductDetails.add(quoteLine);
+		}
+	}
+	if(installLineFound == false)
+	{
+		installProductData = Map();
+		installProductData.put("id",installProductID);
+		newInstallLine = Map();
+		newInstallLine.put("product",installProductData);
+		newInstallLine.put("quantity",1);
+		newInstallLine.put("list_price",installListPrice);
+		updatedProductDetails.add(newInstallLine);
+	}
+
+	// ------------------------------------------------------
+	// Add / update SLA product line, if an SLA tier was selected
+	// ------------------------------------------------------
+	if(slaSelection != null && slaSelection != "")
+	{
+		slaProductIDs = Map();
+		slaProductIDs.put("Bronze","5439147000096147796");
+		slaProductIDs.put("Silver","5439147000006705652");
+		slaProductIDs.put("Gold","5439147000006666808");
+		slaProductIDs.put("Platinum","5439147000096145714");
+
+		slaRates = Map();
+		slaRates.put("Bronze",0.08);
+		slaRates.put("Silver",0.10);
+		slaRates.put("Gold",0.12);
+		slaRates.put("Platinum",0.14);
+
+		hourlyRate = 125;
+		// Total_Install_Hours already includes programming hours - don't add Programming_Hours again
+		totalHoursForSLA = ifnull(priceSheetRecord.Total_Install_Hours,0);
+		slaAmount = totalHoursForSLA * hourlyRate * slaRates.get(slaSelection);
+		slaProductID = slaProductIDs.get(slaSelection);
+
+		if(slaProductID != null && slaProductID != "")
+		{
+			slaLineFound = false;
+			for each existingLine in updatedProductDetails
+			{
+				existingLineProduct = existingLine.get("product");
+				if(existingLineProduct != null && existingLineProduct.get("id") != null && existingLineProduct.get("id").toString() == slaProductID)
+				{
+					existingLine.put("quantity",1);
+					existingLine.put("list_price",slaAmount);
+					slaLineFound = true;
+				}
+			}
+			if(slaLineFound == false)
+			{
+				slaProductData = Map();
+				slaProductData.put("id",slaProductID);
+				newSlaLine = Map();
+				newSlaLine.put("product",slaProductData);
+				newSlaLine.put("quantity",1);
+				newSlaLine.put("list_price",slaAmount);
+				updatedProductDetails.add(newSlaLine);
+			}
+			info "SLA line added/updated:";
+			info slaSelection;
+			info slaAmount;
+		}
+		else
+		{
+			info "SLA product ID not yet configured for tier - skipping SLA line:";
+			info slaSelection;
+		}
+	}
+
+	quoteUpdateData = Map();
+	quoteUpdateData.put("Product_Details",updatedProductDetails);
+	quoteUpdateResponse = zoho.crm.updateRecord("Quotes",quoteID,quoteUpdateData,optionsMap,"zohocrm_connection");
+	info "Quote Product Details Update Response:";
+	info quoteUpdateResponse;
+
+	quoteAPIResponse = invokeurl
+	[
+		url :"https://www.zohoapis.com/crm/v8/Quotes/" + quoteID
+		type :GET
+		connection:"zohocrm_connection"
+	];
+	installQuotedItemID = "";
+	if(quoteAPIResponse.get("data") != null && quoteAPIResponse.get("data").size() > 0)
+	{
+		quoteAPIRecord = quoteAPIResponse.get("data").get(0);
+		if(quoteAPIRecord.get("Quoted_Items") != null)
+		{
+			for each quotedItem in quoteAPIRecord.get("Quoted_Items")
+			{
+				quotedProduct = quotedItem.get("Product_Name");
+				if(quotedProduct != null && quotedProduct.get("id") != null && quotedProduct.get("id").toString() == installProductID)
+				{
+					installQuotedItemID = quotedItem.get("id").toString();
+				}
+			}
+		}
+	}
+
+	// Update custom Unit Cost field on the Install quoted-item row.
+	// Unit_Cost_1 is a cost field, so this runs regardless of updateMode.
+	if(installQuotedItemID != "")
+	{
+		installLineUpdate = Map();
+		installLineUpdate.put("id",installQuotedItemID);
+		installLineUpdate.put("Quantity",1);
+		if(updatePrice == true)
+		{
+			installLineUpdate.put("List_Price",installListPrice);
+		}
+		installLineUpdate.put("Unit_Cost_1",installUnitCost);
+		quotedItemsUpdate = List();
+		quotedItemsUpdate.add(installLineUpdate);
+		quoteData = Map();
+		quoteData.put("Quoted_Items",quotedItemsUpdate);
+		quoteDataList = List();
+		quoteDataList.add(quoteData);
+		quoteUpdateBody = Map();
+		quoteUpdateBody.put("data",quoteDataList);
+		headersMap = Map();
+		headersMap.put("Content-Type","application/json");
+		quoteCustomFieldResponse = invokeurl
+		[
+			url :"https://www.zohoapis.com/crm/v8/Quotes/" + quoteID
+			type :PUT
+			body:quoteUpdateBody.toString()
+			headers:headersMap
+			connection:"zohocrm_connection"
+		];
+		info "Quote Unit Cost Update Response:";
+		info quoteCustomFieldResponse;
+	}
+}
+
+// ======================================================
+// ATTACH VERSIONED PDF TO CRM INSTALL PRICE SHEET
+// via published PRIVATE LINK (no zoho_creator_connection needed)
+// ======================================================
+info "================ PDF ATTACH DEBUG START ================";
+info "crmSyncSuccess:";
+info crmSyncSuccess;
+info "crmInstallPriceSheetID:";
+info crmInstallPriceSheetID;
+
+if(crmSyncSuccess == true && crmInstallPriceSheetID != "")
+{
+	currentVersion = ifnull(priceSheetRecord.Version,0).toLong();
+	newVersion = currentVersion + 1;
+	pdfFileName = "Install_Price_Sheet_" + priceSheetID.toString() + "_v" + newVersion.toString() + ".pdf";
+
+	// TODO: replace with your actual published private-link URL / pattern.
+	privateLinkPDFURL = "https://creatorapp.zoho.com/publish/tvspro/application-by-chris/report-pdf/All_Price_Sheets/" + priceSheetID.toString() + "?privatelinkkey=YOUR_PRIVATE_LINK_KEY";
+
+	info "Private Link PDF URL:";
+	info privateLinkPDFURL;
+
+	pdfFile = invokeurl
+	[
+		url :privateLinkPDFURL
+		type :GET
+	];
+
+	info "PDF Response:";
+	info pdfFile;
+	info "Is PDF Response a File?";
+	info pdfFile.isFile();
+
+	if(pdfFile.isFile())
+	{
+		info "Creator returned a FILE object.";
+		pdfFile.setFileName(pdfFileName);
+		pdfAttachResponse = zoho.crm.v8.attachFile("Install_Price_Sheets",crmInstallPriceSheetID.toLong(),pdfFile,"zohocrm_connection");
+		info "CRM PDF Attachment Response:";
+		info pdfAttachResponse;
+		if(pdfAttachResponse != null && pdfAttachResponse.get("id") != null)
+		{
+			update Price_Sheet[ID == priceSheetID]
+			[
+				Version=newVersion
+			];
+			info "PDF ATTACHMENT SUCCESS";
+		}
+		else
+		{
+			info "PDF ATTACHMENT FAILED - CRM returned no attachment ID.";
+		}
+	}
+	else
+	{
+		info "PDF FETCH FAILED - private link did not return a FILE object.";
+	}
+}
+else
+{
+	info "PDF BLOCK SKIPPED - CRM sync failed or CRM Install Price Sheet ID is blank.";
+}
+info "================ PDF ATTACH DEBUG END ==================";
+
+// Return result so the widget can react
+resultMap = Map();
+resultMap.put("crmSyncSuccess",crmSyncSuccess);
+resultMap.put("crmInstallPriceSheetID",crmInstallPriceSheetID);
+return resultMap;
