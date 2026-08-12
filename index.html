@@ -1,39 +1,151 @@
 <!DOCTYPE html>
 <html>
 <head>
+	<meta charset="UTF-8">
+	<title>Price Sheet Sync</title>
 	<script src="https://js.zohostatic.com/creator/widgets/version/2.0/widgetsdk-min.js"></script>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			margin: 20px;
+		}
+		#promptScreen, #loading, #promptArea, #errorArea {
+			display: none;
+		}
+		select, button {
+			font-size: 14px;
+			padding: 6px;
+			margin: 6px 0;
+		}
+		label {
+			font-weight: bold;
+			display: block;
+			margin-top: 14px;
+		}
+	</style>
 </head>
 <body>
+
+	<!-- Step 1: Prompts, shown before the function is ever called -->
+	<div id="promptScreen">
+		<label for="slaPicklist">SLA Pick List</label>
+		<select id="slaPicklist">
+			<option value="">-- Select an SLA tier --</option>
+		</select>
+
+		<!-- Only shown on Edit, hidden entirely on Create -->
+		<div id="costPricePrompt" style="display:none;">
+			<label for="updateModePicklist">Update:</label>
+			<select id="updateModePicklist">
+				<option value="cost_and_price">Update cost &amp; sell price</option>
+				<option value="cost_only">Just update cost</option>
+			</select>
+		</div>
+
+		<button id="submitPromptsBtn">Continue</button>
+	</div>
+
+	<!-- Step 2: Loading / result, shown after Continue is clicked -->
 	<div id="loading">Syncing to CRM and attaching PDF...</div>
-	<div id="promptArea" style="display:none;"></div>
-	<div id="errorArea" style="display:none; color:red;"></div>
+	<div id="promptArea"></div>
+	<div id="errorArea" style="color:red;"></div>
 
 	<script>
-		let priceSheetID = null;
+		var priceSheetID = null;
+		var isEdit = false;
 
-		ZOHO.CREATOR.init().then(function(){
-			// Grab the record ID passed in via the widget URL param
+		// Hourly rate and SLA percentages - mirrors the server-side function.
+		// Server recomputes the real dollar figure at sync time; these are
+		// just for the live preview shown to the user in the picklist.
+		var HOURLY_RATE = 125;
+		var SLA_RATES = {
+			"Bronze": 0.08,
+			"Silver": 0.10,
+			"Gold": 0.12,
+			"Platinum": 0.14
+		};
+
+		ZOHO.CREATOR.init().then(function () {
 			var params = new URLSearchParams(window.location.search);
 			priceSheetID = params.get("ID");
 
-			runSync();
+			fetchRecordAndShowPrompts();
 		});
 
-		function runSync() {
+		function fetchRecordAndShowPrompts() {
+			// TODO: confirm appName/reportName match your actual app - these
+			// are carried over from the record-summary URL used elsewhere
+			var config = {
+				appName: "application-by-chris",
+				reportName: "All_Price_Sheets",
+				id: priceSheetID
+			};
+
+			ZOHO.CREATOR.DATA.getRecordById(config)
+				.then(function (response) {
+					if (response.code === 3000 && response.data) {
+						var record = response.data;
+
+						var totalInstallHours = parseFloat(record.Total_Install_Hours) || 0;
+						var totalProgrammingHours = parseFloat(record.Total_Programming_Hours) || 0;
+						var totalHours = totalInstallHours + totalProgrammingHours;
+
+						isEdit = !!(record.CRM_Install_Price_Sheet_ID && record.CRM_Install_Price_Sheet_ID !== "");
+
+						buildSLAOptions(totalHours);
+
+						if (isEdit) {
+							document.getElementById("costPricePrompt").style.display = "block";
+						}
+
+						document.getElementById("promptScreen").style.display = "block";
+					} else {
+						showError("Could not load record details.");
+					}
+				})
+				.catch(function (err) {
+					console.error(err);
+					showError("Could not load record details.");
+				});
+		}
+
+		function buildSLAOptions(totalHours) {
+			var picklist = document.getElementById("slaPicklist");
+			["Bronze", "Silver", "Gold", "Platinum"].forEach(function (tier) {
+				var amount = totalHours * HOURLY_RATE * SLA_RATES[tier];
+				var formatted = "$" + amount.toFixed(2);
+				var opt = document.createElement("option");
+				opt.value = tier;
+				opt.text = tier + " - " + formatted;
+				picklist.appendChild(opt);
+			});
+		}
+
+		document.getElementById("submitPromptsBtn").addEventListener("click", function () {
+			var slaSelection = document.getElementById("slaPicklist").value;
+			var updateMode = isEdit ? document.getElementById("updateModePicklist").value : "";
+
+			document.getElementById("promptScreen").style.display = "none";
+			document.getElementById("loading").style.display = "block";
+
+			runSync(slaSelection, updateMode);
+		});
+
+		function runSync(slaSelection, updateMode) {
 			var config = {
 				customfunction_name: "Sync_Install_Price_Sheet_And_PDF",
 				params: {
-					priceSheetID: priceSheetID
+					priceSheetID: priceSheetID,
+					slaSelection: slaSelection,
+					updateMode: updateMode
 				}
 			};
 
 			ZOHO.CREATOR.UTIL.invokeCustomFunction(config)
-				.then(function(response){
+				.then(function (response) {
 					document.getElementById("loading").style.display = "none";
+					console.log("Sync response:", response);
 
-					// response.code === 3000 is Creator's "success" convention
-					// Your function's return Map (crmSyncSuccess, crmInstallPriceSheetID)
-					// comes back inside response.output or response.result depending on SDK version — log it once to confirm shape
 					var result = response.output || response.result || response;
 
 					if (result.crmSyncSuccess === true || result.crmSyncSuccess === "true") {
@@ -42,7 +154,7 @@
 						showError("CRM sync did not complete. Please check the record.");
 					}
 				})
-				.catch(function(err){
+				.catch(function (err) {
 					document.getElementById("loading").style.display = "none";
 					showError("Something went wrong calling the sync function.");
 					console.error(err);
@@ -52,7 +164,6 @@
 		function showPrompts(result) {
 			var promptArea = document.getElementById("promptArea");
 			promptArea.style.display = "block";
-			// TODO: build your actual prompts UI here
 			promptArea.innerHTML = "<p>Synced successfully. CRM ID: " + result.crmInstallPriceSheetID + "</p>";
 		}
 
