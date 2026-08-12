@@ -91,6 +91,8 @@
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
 
+						console.log("record.Total_Install_Hours raw value:", record.Total_Install_Hours, typeof record.Total_Install_Hours);
+
 						// Total_Install_Hours already includes programming hours - use it alone
 						var totalHours = parseFloat(record.Total_Install_Hours) || 0;
 
