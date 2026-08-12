@@ -1,11 +1,10 @@
 // ==========================================================
 // STANDALONE FUNCTION: Sync_Install_Price_Sheet_And_PDF
-// Params:
-//   priceSheetID (BigInt/Number) - the Price_Sheet record ID
-//   slaSelection (String)        - "Bronze" | "Silver" | "Gold" | "Platinum" | ""
-//   updateMode (String)          - "cost_and_price" | "cost_only" | "" (create)
 // Returns: Map with crmSyncSuccess, crmInstallPriceSheetID
 // ==========================================================
+
+map Sync_Install_Price_Sheet_And_PDF(int priceSheetID, string slaSelection, string updateMode)
+{
 
 priceSheetRecord = Price_Sheet[ID == priceSheetID];
 
@@ -406,3 +405,5 @@ resultMap = Map();
 resultMap.put("crmSyncSuccess",crmSyncSuccess);
 resultMap.put("crmInstallPriceSheetID",crmInstallPriceSheetID);
 return resultMap;
+
+}

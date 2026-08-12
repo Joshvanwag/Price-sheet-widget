@@ -66,8 +66,12 @@
 		};
 
 		ZOHO.CREATOR.init().then(function () {
-			var params = new URLSearchParams(window.location.search);
-			priceSheetID = params.get("ID");
+			// window.location.search only sees the iframe's own URL (just
+			// ?serviceOrigin=...), NOT the page-level URL used to open this
+			// widget. getQueryParams() bridges that and returns the real
+			// params the containing Page was opened with.
+			var queryParams = ZOHO.CREATOR.UTIL.getQueryParams();
+			priceSheetID = queryParams.ID;
 
 			fetchRecordAndShowPrompts();
 		});
@@ -86,7 +90,7 @@
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
 
-						// Total_Install_Hours already includes programming hours - don't add Programming_Hours again
+						// Total_Install_Hours already includes programming hours - use it alone
 						var totalHours = parseFloat(record.Total_Install_Hours) || 0;
 
 						isEdit = !!(record.CRM_Install_Price_Sheet_ID && record.CRM_Install_Price_Sheet_ID !== "");
