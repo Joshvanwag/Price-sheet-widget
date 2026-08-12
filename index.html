@@ -91,6 +91,7 @@
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
 
+						console.log("FULL record object:", record);
 						console.log("record.Total_Install_Hours raw value:", record.Total_Install_Hours, typeof record.Total_Install_Hours);
 
 						// Total_Install_Hours already includes programming hours - use it alone
