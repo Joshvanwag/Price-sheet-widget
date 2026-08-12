@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -69,43 +70,12 @@
 		var queryParams = ZOHO.CREATOR.UTIL.getQueryParams();
 		priceSheetID = queryParams.ID;
 
+		console.log("queryParams:", queryParams);
+		console.log("priceSheetID:", priceSheetID);
+
 		fetchRecordAndShowPrompts();
 
 		function fetchRecordAndShowPrompts() {
-	// TODO: confirm appName/reportName match your actual app - these
-	// are carried over from the record-summary URL used elsewhere
-	var config = {
-		appName: "application-by-chris",
-		reportName: "All_Price_Sheets",
-		id: priceSheetID
-	};
-
-	ZOHO.CREATOR.API.getRecordById(config)
-		.then(function (response) {
-			if (response.code === 3000 && response.data) {
-				var record = response.data;
-
-				// Total_Install_Hours already includes programming hours - use it alone
-				var totalHours = parseFloat(record.Total_Install_Hours) || 0;
-
-				isEdit = !!(record.CRM_Install_Price_Sheet_ID && record.CRM_Install_Price_Sheet_ID !== "");
-
-				buildSLAOptions(totalHours);
-
-				if (isEdit) {
-					document.getElementById("costPricePrompt").style.display = "block";
-				}
-
-				document.getElementById("promptScreen").style.display = "block";
-			} else {
-				showError("Could not load record details.");
-			}
-		})
-		.catch(function (err) {
-			console.error(err);
-			showError("Could not load record details.");
-		});
-}
 			// TODO: confirm appName/reportName match your actual app - these
 			// are carried over from the record-summary URL used elsewhere
 			var config = {
@@ -114,7 +84,9 @@
 				id: priceSheetID
 			};
 
-			ZOHO.CREATOR.DATA.getRecordById(config)
+			console.log("config being sent:", config);
+
+			ZOHO.CREATOR.API.getRecordById(config)
 				.then(function (response) {
 					if (response.code === 3000 && response.data) {
 						var record = response.data;
