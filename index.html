@@ -65,16 +65,11 @@
 			"Platinum": 0.14
 		};
 
-		ZOHO.CREATOR.init().then(function () {
-			// window.location.search only sees the iframe's own URL (just
-			// ?serviceOrigin=...), NOT the page-level URL used to open this
-			// widget. getQueryParams() bridges that and returns the real
-			// params the containing Page was opened with.
-			var queryParams = ZOHO.CREATOR.UTIL.getQueryParams();
-			priceSheetID = queryParams.ID;
+		// v2 SDK has no init() method - call API methods directly
+		var queryParams = ZOHO.CREATOR.UTIL.getQueryParams();
+		priceSheetID = queryParams.ID;
 
-			fetchRecordAndShowPrompts();
-		});
+		fetchRecordAndShowPrompts();
 
 		function fetchRecordAndShowPrompts() {
 			// TODO: confirm appName/reportName match your actual app - these
