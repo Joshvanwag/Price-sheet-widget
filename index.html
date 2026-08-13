@@ -355,17 +355,6 @@
 			<!-- Step 1: Prompts, shown before the function is ever called -->
 			<div id="promptScreen" class="hidden">
 				<div class="fields">
-					<div class="field-row">
-						<label>SLA Pick List</label>
-						<div id="slaPicklist" class="single-picklist" data-value="" tabindex="0">
-							<div class="single-picklist-value-line">
-								<span class="single-picklist-display placeholder">-- Select an SLA tier --</span>
-								<span class="single-picklist-caret"></span>
-							</div>
-							<div class="single-picklist-menu hidden"></div>
-						</div>
-					</div>
-
 					<!-- Only shown on Edit, hidden entirely on Create -->
 					<div id="costPricePrompt" class="field-row hidden">
 						<label>Update</label>
@@ -377,17 +366,27 @@
 							<div class="single-picklist-menu hidden"></div>
 						</div>
 					</div>
+
+					<div class="field-row">
+						<label>SLA Pick List</label>
+						<div id="slaPicklist" class="single-picklist" data-value="" tabindex="0">
+							<div class="single-picklist-value-line">
+								<span class="single-picklist-display placeholder">-- Select an SLA tier --</span>
+								<span class="single-picklist-caret"></span>
+							</div>
+							<div class="single-picklist-menu hidden"></div>
+						</div>
+					</div>
 				</div>
 
 				<div class="sla-table-wrap">
 					<div class="sla-table-title">SLA Tier Breakdown</div>
 					<table class="sla-table">
 						<thead>
-							<tr>
+								<tr>
 								<th>Tier</th>
+								<th>Hours</th>
 								<th>Qty</th>
-								<th>Unit Cost</th>
-								<th>Unit Retail</th>
 								<th>Total Cost</th>
 								<th>Total Retail</th>
 							</tr>
@@ -418,7 +417,7 @@
 		// block covering an hour range; quantity = blocks needed to
 		// cover the project's total hours, rounded up.
 		var SLA_TIERS = [
-			{ name: "Bronze", minHours: 0, maxHours: 24, unitCost: 337.16, unitRetail: 539.46 },
+			{ name: "Extended Warranty", minHours: 0, maxHours: 24, unitCost: 337.16, unitRetail: 539.46 },
 			{ name: "Silver", minHours: 25, maxHours: 48, unitCost: 674.33, unitRetail: 1078.93 },
 			{ name: "Gold", minHours: 49, maxHours: 96, unitCost: 1685.81, unitRetail: 2697.30 },
 			{ name: "Platinum", minHours: 97, maxHours: 199, unitCost: 3371.63, unitRetail: 5394.61 }
@@ -574,11 +573,11 @@
 				var quantity = Math.max(1, Math.ceil(totalHours / tier.maxHours - 0.2));
 				var totalCost = quantity * tier.unitCost;
 				var totalRetail = quantity * tier.unitRetail;
+				var hoursRangeLabel = tier.minHours + " - " + (tier.maxHours * 1.2).toFixed(1);
 				return {
 					name: tier.name,
 					quantity: quantity,
-					unitCost: tier.unitCost,
-					unitRetail: tier.unitRetail,
+					hoursRangeLabel: hoursRangeLabel,
 					totalCost: totalCost,
 					totalRetail: totalRetail
 				};
@@ -587,7 +586,7 @@
 			var options = rows.map(function (row) {
 				return {
 					value: row.name,
-					label: row.name + " \u2014 Qty " + row.quantity + " \u2014 " + formatMoney(row.totalRetail)
+					label: row.name + " \u2014 " + formatMoney(row.totalRetail)
 				};
 			});
 			slaPicklistController.setOptions(options);
@@ -605,9 +604,8 @@
 				}
 				tr.innerHTML =
 					"<td>" + row.name + "</td>" +
+					"<td>" + row.hoursRangeLabel + "</td>" +
 					"<td>" + row.quantity + "</td>" +
-					"<td>" + formatMoney(row.unitCost) + "</td>" +
-					"<td>" + formatMoney(row.unitRetail) + "</td>" +
 					"<td>" + formatMoney(row.totalCost) + "</td>" +
 					"<td>" + formatMoney(row.totalRetail) + "</td>";
 				tbody.appendChild(tr);
