@@ -136,6 +136,115 @@
 			cursor: not-allowed;
 		}
 
+		/* --- Custom single-value picklist (native <select> can't be styled
+		   inside its dropdown popup, so this replaces it entirely) --- */
+		.single-picklist {
+			position: relative;
+			width: 100%;
+			min-width: 0;
+			font-size: 14px;
+		}
+
+		.single-picklist-value-line {
+			min-height: 42px;
+			width: 100%;
+			display: flex;
+			align-items: center;
+			box-sizing: border-box;
+			padding: 10px 38px 10px 13px;
+			border: 1px solid #d1d5db;
+			border-radius: 8px;
+			background: #ffffff;
+			cursor: pointer;
+			position: relative;
+			transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		}
+
+		.single-picklist:not(.disabled) .single-picklist-value-line:hover {
+			border-color: #93c5fd;
+		}
+
+		.single-picklist.open .single-picklist-value-line,
+		.single-picklist:focus .single-picklist-value-line {
+			outline: none;
+			border-color: #60a5fa;
+			box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+		}
+
+		.single-picklist.disabled .single-picklist-value-line {
+			background: #f3f4f6;
+			color: #6b7280;
+			cursor: not-allowed;
+		}
+
+		.single-picklist-display {
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+			color: #1f2937;
+		}
+
+		.single-picklist-display.placeholder {
+			color: #9ca3af;
+		}
+
+		.single-picklist-caret {
+			position: absolute;
+			right: 13px;
+			top: 50%;
+			width: 8px;
+			height: 8px;
+			border-right: 2px solid #6b7280;
+			border-bottom: 2px solid #6b7280;
+			transform: translateY(-65%) rotate(45deg);
+			transition: transform 0.15s ease;
+		}
+
+		.single-picklist.open .single-picklist-caret {
+			transform: translateY(-25%) rotate(225deg);
+		}
+
+		.single-picklist-menu {
+			position: absolute;
+			z-index: 100;
+			top: calc(100% + 5px);
+			left: 0;
+			right: 0;
+			max-height: 240px;
+			overflow-y: auto;
+			padding: 5px;
+			border: 1px solid #d1d5db;
+			border-radius: 8px;
+			background: #ffffff;
+			box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+		}
+
+		.single-picklist-option {
+			display: block;
+			width: 100%;
+			padding: 9px 10px;
+			border: 0;
+			border-radius: 6px;
+			background: transparent;
+			color: #1f2937;
+			text-align: left;
+			font-weight: 400;
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.single-picklist-option:hover:not(:disabled) {
+			background: #eff6ff;
+			color: #1e3a8a;
+		}
+
+		.single-picklist-option.selected {
+			background: #dbeafe;
+			color: #1e40af;
+			font-weight: 600;
+		}
+
 		.actions {
 			display: flex;
 			justify-content: flex-end;
@@ -187,19 +296,26 @@
 			<div id="promptScreen" class="hidden">
 				<div class="fields">
 					<div class="field-row">
-						<label for="slaPicklist">SLA Pick List</label>
-						<select id="slaPicklist">
-							<option value="">-- Select an SLA tier --</option>
-						</select>
+						<label>SLA Pick List</label>
+						<div id="slaPicklist" class="single-picklist" data-value="" tabindex="0">
+							<div class="single-picklist-value-line">
+								<span class="single-picklist-display placeholder">-- Select an SLA tier --</span>
+								<span class="single-picklist-caret"></span>
+							</div>
+							<div class="single-picklist-menu hidden"></div>
+						</div>
 					</div>
 
 					<!-- Only shown on Edit, hidden entirely on Create -->
 					<div id="costPricePrompt" class="field-row hidden">
-						<label for="updateModePicklist">Update</label>
-						<select id="updateModePicklist">
-							<option value="cost_and_price">Update cost &amp; sell price</option>
-							<option value="cost_only">Just update cost</option>
-						</select>
+						<label>Update</label>
+						<div id="updateModePicklist" class="single-picklist" data-value="cost_and_price" tabindex="0">
+							<div class="single-picklist-value-line">
+								<span class="single-picklist-display">Update cost &amp; sell price</span>
+								<span class="single-picklist-caret"></span>
+							</div>
+							<div class="single-picklist-menu hidden"></div>
+						</div>
 					</div>
 				</div>
 
@@ -229,6 +345,81 @@
 			"Gold": 0.12,
 			"Platinum": 0.14
 		};
+
+		// --- Minimal custom single-picklist controller ---
+		// Native <select> can't be styled inside its own dropdown popup, so
+		// this builds a fully-styleable equivalent: a clickable value line
+		// plus an absolutely-positioned menu of button options.
+		function initSinglePicklist(containerEl, options, onSelect) {
+			var valueLine = containerEl.querySelector(".single-picklist-value-line");
+			var display = containerEl.querySelector(".single-picklist-display");
+			var menu = containerEl.querySelector(".single-picklist-menu");
+
+			function renderOptions() {
+				menu.innerHTML = "";
+				options.forEach(function (opt) {
+					var btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "single-picklist-option";
+					btn.textContent = opt.label;
+					if (containerEl.dataset.value === opt.value) {
+						btn.classList.add("selected");
+					}
+					btn.addEventListener("click", function (e) {
+						e.stopPropagation();
+						containerEl.dataset.value = opt.value;
+						display.textContent = opt.label;
+						display.classList.remove("placeholder");
+						closeMenu();
+						renderOptions();
+						if (onSelect) onSelect(opt.value);
+					});
+					menu.appendChild(btn);
+				});
+			}
+
+			function openMenu() {
+				menu.classList.remove("hidden");
+				containerEl.classList.add("open");
+			}
+
+			function closeMenu() {
+				menu.classList.add("hidden");
+				containerEl.classList.remove("open");
+			}
+
+			valueLine.addEventListener("click", function (e) {
+				e.stopPropagation();
+				if (containerEl.classList.contains("open")) {
+					closeMenu();
+				} else {
+					openMenu();
+				}
+			});
+
+			document.addEventListener("click", function () {
+				closeMenu();
+			});
+
+			renderOptions();
+
+			return {
+				setOptions: function (newOptions) {
+					options = newOptions;
+					renderOptions();
+				}
+			};
+		}
+
+		var slaPicklistEl = document.getElementById("slaPicklist");
+		var updateModePicklistEl = document.getElementById("updateModePicklist");
+
+		initSinglePicklist(updateModePicklistEl, [
+			{ value: "cost_and_price", label: "Update cost & sell price" },
+			{ value: "cost_only", label: "Just update cost" }
+		]);
+
+		var slaPicklistController = initSinglePicklist(slaPicklistEl, []);
 
 		// v2 SDK has no init() method, but getQueryParams IS promise-based
 		ZOHO.CREATOR.UTIL.getQueryParams().then(function (queryParams) {
@@ -280,20 +471,17 @@
 		}
 
 		function buildSLAOptions(totalHours) {
-			var picklist = document.getElementById("slaPicklist");
-			["Bronze", "Silver", "Gold", "Platinum"].forEach(function (tier) {
+			var options = ["Bronze", "Silver", "Gold", "Platinum"].map(function (tier) {
 				var amount = totalHours * HOURLY_RATE * SLA_RATES[tier];
 				var formatted = "$" + amount.toFixed(2);
-				var opt = document.createElement("option");
-				opt.value = tier;
-				opt.text = tier + " - " + formatted;
-				picklist.appendChild(opt);
+				return { value: tier, label: tier + " - " + formatted };
 			});
+			slaPicklistController.setOptions(options);
 		}
 
 		document.getElementById("submitPromptsBtn").addEventListener("click", function () {
-			var slaSelection = document.getElementById("slaPicklist").value;
-			var updateMode = isEdit ? document.getElementById("updateModePicklist").value : "";
+			var slaSelection = slaPicklistEl.dataset.value || "";
+			var updateMode = isEdit ? (updateModePicklistEl.dataset.value || "cost_and_price") : "";
 
 			document.getElementById("promptScreen").classList.add("hidden");
 			document.getElementById("loading").classList.remove("hidden");
