@@ -6,50 +6,214 @@
 	<title>Price Sheet Sync</title>
 	<script src="https://js.zohostatic.com/creator/widgets/version/2.0/widgetsdk-min.js"></script>
 	<style>
-		body {
+		:root {
 			font-family: Arial, sans-serif;
-			margin: 20px;
+			color: #1f2937;
+			background: #f3f4f6;
 		}
-		#promptScreen, #loading, #promptArea, #errorArea {
-			display: none;
+
+		html, body {
+			width: 100%;
+			min-height: 100%;
 		}
-		select, button {
-			font-size: 14px;
-			padding: 6px;
-			margin: 6px 0;
+
+		body {
+			margin: 0;
+			overflow-x: hidden;
 		}
-		label {
-			font-weight: bold;
+
+		.wrap {
+			width: 100%;
+			padding: 20px;
+			min-height: 100vh;
+			box-sizing: border-box;
+		}
+
+		.card {
+			width: 100%;
+			max-width: none;
+			margin: 0;
+			box-sizing: border-box;
+			background: #ffffff;
+			border: 1px solid #e5e7eb;
+			border-radius: 16px;
+			padding: 28px 32px;
+			box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+		}
+
+		.header {
+			display: flex;
+			justify-content: space-between;
+			gap: 16px;
+			align-items: flex-start;
+			margin-bottom: 22px;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 28px;
+		}
+
+		p {
+			margin: 0;
+		}
+
+		.hint {
+			color: #6b7280;
+			margin-bottom: 12px;
+		}
+
+		.message {
+			padding: 12px 14px;
+			border-radius: 10px;
+			border: 1px solid transparent;
+			margin-bottom: 16px;
+		}
+
+		.message.info {
+			background: #eff6ff;
+			border-color: #bfdbfe;
+		}
+
+		.message.success {
+			background: #f0fdf4;
+			border-color: #bbf7d0;
+		}
+
+		.message.error {
+			background: #fef2f2;
+			border-color: #fecaca;
+		}
+
+		.fields {
 			display: block;
-			margin-top: 14px;
+		}
+
+		.field-row {
+			display: grid;
+			gap: 6px;
+			margin-bottom: 16px;
+			align-content: start;
+		}
+
+		label {
+			font-weight: 700;
+			font-size: 14px;
+		}
+
+		select {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 11px 36px 11px 13px;
+			border: 1px solid #d1d5db;
+			border-radius: 8px;
+			font: inherit;
+			font-size: 14px;
+			background-color: #ffffff;
+			appearance: none;
+			-webkit-appearance: none;
+			background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'><path d='M5.5 7.5L10 12L14.5 7.5' stroke='%236B7280' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+			background-repeat: no-repeat;
+			background-position: right 10px center;
+			background-size: 20px 20px;
+			cursor: pointer;
+			transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		}
+
+		select:hover:not(:disabled) {
+			border-color: #a5b4fc;
+		}
+
+		select:focus {
+			outline: none;
+			border-color: #60a5fa;
+			box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.22);
+		}
+
+		select:disabled {
+			background-color: #f3f4f6;
+			color: #6b7280;
+			cursor: not-allowed;
+		}
+
+		.actions {
+			display: flex;
+			justify-content: flex-end;
+			gap: 10px;
+			margin-top: 24px;
+		}
+
+		button {
+			border: 0;
+			border-radius: 9px;
+			padding: 11px 18px;
+			font-weight: 700;
+			font-size: 14px;
+			cursor: pointer;
+			background: #2563eb;
+			color: white;
+			transition: background 0.15s ease, transform 0.05s ease;
+		}
+
+		button:hover:not(:disabled) {
+			background: #1d4ed8;
+		}
+
+		button:active:not(:disabled) {
+			transform: translateY(1px);
+		}
+
+		button:disabled {
+			cursor: not-allowed;
+			opacity: 0.55;
+		}
+
+		.hidden {
+			display: none;
 		}
 	</style>
 </head>
 <body>
 
-	<!-- Step 1: Prompts, shown before the function is ever called -->
-	<div id="promptScreen">
-		<label for="slaPicklist">SLA Pick List</label>
-		<select id="slaPicklist">
-			<option value="">-- Select an SLA tier --</option>
-		</select>
+	<main class="wrap">
+		<section class="card">
+			<div class="header">
+				<div>
+					<h1>Price Sheet Sync</h1>
+				</div>
+			</div>
 
-		<!-- Only shown on Edit, hidden entirely on Create -->
-		<div id="costPricePrompt" style="display:none;">
-			<label for="updateModePicklist">Update:</label>
-			<select id="updateModePicklist">
-				<option value="cost_and_price">Update cost &amp; sell price</option>
-				<option value="cost_only">Just update cost</option>
-			</select>
-		</div>
+			<!-- Step 1: Prompts, shown before the function is ever called -->
+			<div id="promptScreen" class="hidden">
+				<div class="fields">
+					<div class="field-row">
+						<label for="slaPicklist">SLA Pick List</label>
+						<select id="slaPicklist">
+							<option value="">-- Select an SLA tier --</option>
+						</select>
+					</div>
 
-		<button id="submitPromptsBtn">Continue</button>
-	</div>
+					<!-- Only shown on Edit, hidden entirely on Create -->
+					<div id="costPricePrompt" class="field-row hidden">
+						<label for="updateModePicklist">Update</label>
+						<select id="updateModePicklist">
+							<option value="cost_and_price">Update cost &amp; sell price</option>
+							<option value="cost_only">Just update cost</option>
+						</select>
+					</div>
+				</div>
 
-	<!-- Step 2: Loading / result, shown after Continue is clicked -->
-	<div id="loading">Syncing to CRM and attaching PDF...</div>
-	<div id="promptArea"></div>
-	<div id="errorArea" style="color:red;"></div>
+				<div class="actions">
+					<button id="submitPromptsBtn" type="button">Continue</button>
+				</div>
+			</div>
+
+			<!-- Step 2: Loading / result, shown after Continue is clicked -->
+			<div id="loading" class="message info hidden">Syncing to CRM and attaching PDF...</div>
+			<div id="promptArea" class="message success hidden"></div>
+			<div id="errorArea" class="message error hidden"></div>
+		</section>
+	</main>
 
 	<script>
 		var priceSheetID = null;
@@ -76,8 +240,6 @@
 		});
 
 		function fetchRecordAndShowPrompts() {
-			// TODO: confirm appName/reportName match your actual app - these
-			// are carried over from the record-summary URL used elsewhere
 			var config = {
 				app_name: "application-by-chris",
 				report_name: "All_Price_Sheets",
@@ -103,10 +265,10 @@
 						buildSLAOptions(totalHours);
 
 						if (isEdit) {
-							document.getElementById("costPricePrompt").style.display = "block";
+							document.getElementById("costPricePrompt").classList.remove("hidden");
 						}
 
-						document.getElementById("promptScreen").style.display = "block";
+						document.getElementById("promptScreen").classList.remove("hidden");
 					} else {
 						showError("Could not load record details.");
 					}
@@ -133,8 +295,8 @@
 			var slaSelection = document.getElementById("slaPicklist").value;
 			var updateMode = isEdit ? document.getElementById("updateModePicklist").value : "";
 
-			document.getElementById("promptScreen").style.display = "none";
-			document.getElementById("loading").style.display = "block";
+			document.getElementById("promptScreen").classList.add("hidden");
+			document.getElementById("loading").classList.remove("hidden");
 
 			runSync(slaSelection, updateMode);
 		});
@@ -154,7 +316,7 @@
 
 			ZOHO.CREATOR.DATA.invokeCustomApi(config)
 				.then(function (response) {
-					document.getElementById("loading").style.display = "none";
+					document.getElementById("loading").classList.add("hidden");
 					console.log("Sync response:", response);
 
 					var result = response.output || response.result || response;
@@ -166,7 +328,7 @@
 					}
 				})
 				.catch(function (err) {
-					document.getElementById("loading").style.display = "none";
+					document.getElementById("loading").classList.add("hidden");
 					showError("Something went wrong calling the sync function.");
 					console.error(err);
 				});
@@ -174,13 +336,13 @@
 
 		function showPrompts(result) {
 			var promptArea = document.getElementById("promptArea");
-			promptArea.style.display = "block";
+			promptArea.classList.remove("hidden");
 			promptArea.innerHTML = "<p>Synced successfully. CRM ID: " + result.crmInstallPriceSheetID + "</p>";
 		}
 
 		function showError(msg) {
 			var errorArea = document.getElementById("errorArea");
-			errorArea.style.display = "block";
+			errorArea.classList.remove("hidden");
 			errorArea.innerText = msg;
 		}
 	</script>
