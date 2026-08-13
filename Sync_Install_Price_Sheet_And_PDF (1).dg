@@ -154,16 +154,26 @@ if(crmSyncSuccess == true && priceSheetRecord.Deal_Name != null && priceSheetRec
 	info dealHoursUpdateResponse;
 }
 
-// Add or update Install line + SLA line on Sales Quote
+// Add or update Install + Programming lines, plus SLA line, on Sales Quote
 if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && priceSheetRecord.CRM_Sales_Quote_ID != "")
 {
 	quoteID = priceSheetRecord.CRM_Sales_Quote_ID.toLong();
 	installProductID = "5439147000006666817";
-	installUnitCost = ifnull(priceSheetRecord.Admin_Expenses,0) + ifnull(priceSheetRecord.Install_Line_Item_Cost,0);
-	installListPrice = ifnull(priceSheetRecord.Sale_Price,0);
+	programmingProductID = "5439147000091322465";
+
+	// Install and Programming now use the pre-split fields so the two
+	// lines together equal the same combined total as before - using
+	// Sale_Price/Admin_Expenses on Install alone would double-count
+	// once Programming has its own line.
+	installUnitCost = ifnull(priceSheetRecord.Install_Only_Total_Cost,0);
+	installListPrice = ifnull(priceSheetRecord.Install_MSRP,0);
+	programmingUnitCost = ifnull(priceSheetRecord.Programming_Only_Total_Cost,0);
+	programmingListPrice = ifnull(priceSheetRecord.Programming_MSRP,0);
+
 	quoteRecord = zoho.crm.getRecordById("Quotes",quoteID,getOptions,"zohocrm_connection");
 	updatedProductDetails = List();
 	installLineFound = false;
+	programmingLineFound = false;
 	if(quoteRecord.get("Product_Details") != null)
 	{
 		for each existingQuoteLine in quoteRecord.get("Product_Details")
@@ -201,6 +211,15 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 				}
 				installLineFound = true;
 			}
+			if(existingProduct != null && existingProduct.get("id") != null && existingProduct.get("id").toString() == programmingProductID)
+			{
+				quoteLine.put("quantity",1);
+				if(updatePrice == true)
+				{
+					quoteLine.put("list_price",programmingListPrice);
+				}
+				programmingLineFound = true;
+			}
 			updatedProductDetails.add(quoteLine);
 		}
 	}
@@ -214,10 +233,26 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 		newInstallLine.put("list_price",installListPrice);
 		updatedProductDetails.add(newInstallLine);
 	}
+	if(programmingLineFound == false)
+	{
+		programmingProductData = Map();
+		programmingProductData.put("id",programmingProductID);
+		newProgrammingLine = Map();
+		newProgrammingLine.put("product",programmingProductData);
+		newProgrammingLine.put("quantity",1);
+		newProgrammingLine.put("list_price",programmingListPrice);
+		updatedProductDetails.add(newProgrammingLine);
+	}
 
 	// ------------------------------------------------------
-	// Add / update SLA product line, if an SLA tier was selected
+	// Add / update SLA product line, if an SLA tier was selected.
+	// Each tier is a fixed-price block covering an hour range;
+	// quantity = how many blocks are needed to cover total hours.
 	// ------------------------------------------------------
+	info "slaSelection raw value received:";
+	info slaSelection;
+	slaCost = 0;
+	slaProductID = "";
 	if(slaSelection != null && slaSelection != "")
 	{
 		slaProductIDs = Map();
@@ -226,17 +261,58 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 		slaProductIDs.put("Gold","5439147000006666808");
 		slaProductIDs.put("Platinum","5439147000096145714");
 
-		slaRates = Map();
-		slaRates.put("Bronze",0.08);
-		slaRates.put("Silver",0.10);
-		slaRates.put("Gold",0.12);
-		slaRates.put("Platinum",0.14);
-
-		hourlyRate = 125;
 		// Total_Install_Hours already includes programming hours - don't add Programming_Hours again
 		totalHoursForSLA = ifnull(priceSheetRecord.Total_Install_Hours,0);
-		slaAmount = totalHoursForSLA * hourlyRate * slaRates.get(slaSelection);
-		slaProductID = slaProductIDs.get(slaSelection);
+
+		// SLA tier table - hardcoded here and mirrored in the widget (no
+		// shared Creator data source; both sides just need to agree on
+		// these same numbers). Each tier is a fixed-price block covering
+		// an hour range; quantity = blocks needed to cover total hours.
+		slaTierMaxHours = Map();
+		slaTierMaxHours.put("Bronze",24);
+		slaTierMaxHours.put("Silver",48);
+		slaTierMaxHours.put("Gold",96);
+		slaTierMaxHours.put("Platinum",199);
+
+		slaTierUnitCost = Map();
+		slaTierUnitCost.put("Bronze",337.16);
+		slaTierUnitCost.put("Silver",674.33);
+		slaTierUnitCost.put("Gold",1685.81);
+		slaTierUnitCost.put("Platinum",3371.63);
+
+		slaTierUnitRetail = Map();
+		slaTierUnitRetail.put("Bronze",539.46);
+		slaTierUnitRetail.put("Silver",1078.93);
+		slaTierUnitRetail.put("Gold",2697.30);
+		slaTierUnitRetail.put("Platinum",5394.61);
+
+		tierMaxHours = slaTierMaxHours.get(slaSelection);
+		if(tierMaxHours == null)
+		{
+			info "slaSelection did not match a known tier - skipping SLA line entirely:";
+			info slaSelection;
+			slaAmount = 0;
+			slaProductID = "";
+		}
+		else
+		{
+			// 20% variance: same flat buffer as the widget - a grace band
+			// of (tierMaxHours * 0.2) past each clean multiple before the
+			// next unit is required. No proration, still a strict step.
+			slaQuantity = ceil(totalHoursForSLA / tierMaxHours - 0.2);
+			if(slaQuantity < 1)
+			{
+				slaQuantity = 1;
+			}
+			slaAmount = slaQuantity * slaTierUnitRetail.get(slaSelection);
+			slaCost = slaQuantity * slaTierUnitCost.get(slaSelection);
+			slaProductID = slaProductIDs.get(slaSelection);
+
+			info "SLA tier matched - quantity/cost/retail:";
+			info slaQuantity;
+			info slaCost;
+			info slaAmount;
+		}
 
 		if(slaProductID != null && slaProductID != "")
 		{
@@ -285,6 +361,8 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 		connection:"zohocrm_connection"
 	];
 	installQuotedItemID = "";
+	programmingQuotedItemID = "";
+	slaQuotedItemID = "";
 	if(quoteAPIResponse.get("data") != null && quoteAPIResponse.get("data").size() > 0)
 	{
 		quoteAPIRecord = quoteAPIResponse.get("data").get(0);
@@ -297,12 +375,22 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 				{
 					installQuotedItemID = quotedItem.get("id").toString();
 				}
+				if(quotedProduct != null && quotedProduct.get("id") != null && quotedProduct.get("id").toString() == programmingProductID)
+				{
+					programmingQuotedItemID = quotedItem.get("id").toString();
+				}
+				if(slaProductID != null && slaProductID != "" && quotedProduct != null && quotedProduct.get("id") != null && quotedProduct.get("id").toString() == slaProductID)
+				{
+					slaQuotedItemID = quotedItem.get("id").toString();
+				}
 			}
 		}
 	}
 
-	// Update custom Unit Cost field on the Install quoted-item row.
-	// Unit_Cost_1 is a cost field, so this runs regardless of updateMode.
+	// Update custom Unit Cost field on the Install and Programming quoted-item
+	// rows, in a single PUT call. Unit_Cost_1 is a cost field, so this runs
+	// regardless of updateMode.
+	quotedItemsUpdate = List();
 	if(installQuotedItemID != "")
 	{
 		installLineUpdate = Map();
@@ -313,8 +401,34 @@ if(crmSyncSuccess == true && priceSheetRecord.CRM_Sales_Quote_ID != null && pric
 			installLineUpdate.put("List_Price",installListPrice);
 		}
 		installLineUpdate.put("Unit_Cost_1",installUnitCost);
-		quotedItemsUpdate = List();
 		quotedItemsUpdate.add(installLineUpdate);
+	}
+	if(programmingQuotedItemID != "")
+	{
+		programmingLineUpdate = Map();
+		programmingLineUpdate.put("id",programmingQuotedItemID);
+		programmingLineUpdate.put("Quantity",1);
+		if(updatePrice == true)
+		{
+			programmingLineUpdate.put("List_Price",programmingListPrice);
+		}
+		programmingLineUpdate.put("Unit_Cost_1",programmingUnitCost);
+		quotedItemsUpdate.add(programmingLineUpdate);
+	}
+	if(slaQuotedItemID != "")
+	{
+		slaLineUpdate = Map();
+		slaLineUpdate.put("id",slaQuotedItemID);
+		slaLineUpdate.put("Quantity",1);
+		if(updatePrice == true)
+		{
+			slaLineUpdate.put("List_Price",slaAmount);
+		}
+		slaLineUpdate.put("Unit_Cost_1",slaCost);
+		quotedItemsUpdate.add(slaLineUpdate);
+	}
+	if(quotedItemsUpdate.size() > 0)
+	{
 		quoteData = Map();
 		quoteData.put("Quoted_Items",quotedItemsUpdate);
 		quoteDataList = List();
@@ -352,8 +466,9 @@ if(crmSyncSuccess == true && crmInstallPriceSheetID != "")
 	newVersion = currentVersion + 1;
 	pdfFileName = "Install_Price_Sheet_" + priceSheetID.toString() + "_v" + newVersion.toString() + ".pdf";
 
-	// TODO: replace with your actual published private-link URL / pattern.
-	privateLinkPDFURL = "https://creatorapp.zoho.com/publish/tvspro/application-by-chris/report-pdf/All_Price_Sheets/" + priceSheetID.toString() + "?privatelinkkey=YOUR_PRIVATE_LINK_KEY";
+	// Real published-record PDF URL pattern:
+	// https://creatorapp.zohopublic.com/<username>/<app_link_name>/record-pdf/<report_link_name>/<record_ID>/<file_name>/<private_key>/
+	privateLinkPDFURL = "https://creatorapp.zohopublic.com/tvspro/application-by-chris/record-pdf/All_Price_Sheets/" + priceSheetID.toString() + "/" + pdfFileName + "/nHR3T0T3STQvUn17bDeCrR5MRYtXF7sY6QdsN4kky38WP3EZHpdYdjD1EjeAj7tqXFRrbrsuJ9NAGdHa82my0snJvWbfJCxRrrSu/";
 
 	info "Private Link PDF URL:";
 	info privateLinkPDFURL;

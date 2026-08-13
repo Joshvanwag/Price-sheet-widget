@@ -285,6 +285,61 @@
 		.hidden {
 			display: none;
 		}
+
+		/* --- SLA tier breakdown table --- */
+		.sla-table-wrap {
+			margin-top: 20px;
+		}
+
+		.sla-table-title {
+			font-weight: 700;
+			font-size: 13px;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+			color: #6b7280;
+			margin-bottom: 8px;
+		}
+
+		table.sla-table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 13px;
+			border: 1px solid #e5e7eb;
+			border-radius: 10px;
+			overflow: hidden;
+		}
+
+		table.sla-table th,
+		table.sla-table td {
+			padding: 9px 10px;
+			text-align: right;
+			border-bottom: 1px solid #e5e7eb;
+		}
+
+		table.sla-table th:first-child,
+		table.sla-table td:first-child {
+			text-align: left;
+		}
+
+		table.sla-table thead th {
+			background: #eff6ff;
+			color: #1e40af;
+			font-weight: 700;
+			font-size: 12px;
+			text-transform: uppercase;
+			letter-spacing: 0.03em;
+			border-bottom: 1px solid #bfdbfe;
+		}
+
+		table.sla-table tbody tr:last-child td {
+			border-bottom: 0;
+		}
+
+		table.sla-table tbody tr.selected-tier td {
+			background: #dbeafe;
+			font-weight: 700;
+			color: #1e40af;
+		}
 	</style>
 </head>
 <body>
@@ -324,6 +379,23 @@
 					</div>
 				</div>
 
+				<div class="sla-table-wrap">
+					<div class="sla-table-title">SLA Tier Breakdown</div>
+					<table class="sla-table">
+						<thead>
+							<tr>
+								<th>Tier</th>
+								<th>Qty</th>
+								<th>Unit Cost</th>
+								<th>Unit Retail</th>
+								<th>Total Cost</th>
+								<th>Total Retail</th>
+							</tr>
+						</thead>
+						<tbody id="slaTableBody"></tbody>
+					</table>
+				</div>
+
 				<div class="actions">
 					<button id="submitPromptsBtn" type="button">Continue</button>
 				</div>
@@ -340,16 +412,17 @@
 		var priceSheetID = null;
 		var isEdit = false;
 
-		// Hourly rate and SLA percentages - mirrors the server-side function.
-		// Server recomputes the real dollar figure at sync time; these are
-		// just for the live preview shown to the user in the picklist.
-		var HOURLY_RATE = 125;
-		var SLA_RATES = {
-			"Bronze": 0.08,
-			"Silver": 0.10,
-			"Gold": 0.12,
-			"Platinum": 0.14
-		};
+		// SLA tier table - hardcoded here and mirrored in the server-side
+		// function (no shared Creator data source; both sides just need
+		// to agree on these same numbers). Each tier is a fixed-price
+		// block covering an hour range; quantity = blocks needed to
+		// cover the project's total hours, rounded up.
+		var SLA_TIERS = [
+			{ name: "Bronze", minHours: 0, maxHours: 24, unitCost: 337.16, unitRetail: 539.46 },
+			{ name: "Silver", minHours: 25, maxHours: 48, unitCost: 674.33, unitRetail: 1078.93 },
+			{ name: "Gold", minHours: 49, maxHours: 96, unitCost: 1685.81, unitRetail: 2697.30 },
+			{ name: "Platinum", minHours: 97, maxHours: 199, unitCost: 3371.63, unitRetail: 5394.61 }
+		];
 
 		// --- Minimal custom single-picklist controller ---
 		// Native <select> can't be styled inside its own dropdown popup, so
@@ -424,7 +497,21 @@
 			{ value: "cost_only", label: "Just update cost" }
 		]);
 
-		var slaPicklistController = initSinglePicklist(slaPicklistEl, []);
+		var slaPicklistController = initSinglePicklist(slaPicklistEl, [], function (selectedValue) {
+			highlightSelectedTierRow(selectedValue);
+		});
+
+		function highlightSelectedTierRow(selectedTierName) {
+			var rows = document.querySelectorAll("#slaTableBody tr");
+			rows.forEach(function (tr) {
+				var nameCell = tr.querySelector("td");
+				if (nameCell && nameCell.textContent === selectedTierName) {
+					tr.className = "selected-tier";
+				} else {
+					tr.className = "";
+				}
+			});
+		}
 
 		// v2 SDK has no init() method, but getQueryParams IS promise-based
 		ZOHO.CREATOR.UTIL.getQueryParams().then(function (queryParams) {
@@ -475,13 +562,56 @@
 				});
 		}
 
+		function formatMoney(n) {
+			return "$" + n.toFixed(2);
+		}
+
 		function buildSLAOptions(totalHours) {
-			var options = ["Bronze", "Silver", "Gold", "Platinum"].map(function (tier) {
-				var amount = totalHours * HOURLY_RATE * SLA_RATES[tier];
-				var formatted = "$" + amount.toFixed(2);
-				return { value: tier, label: tier + " - " + formatted };
+			var rows = SLA_TIERS.map(function (tier) {
+				// 20% variance: a flat buffer of (maxHours * 0.2) past each
+				// clean multiple before the next unit is required. No
+				// proration - still a strict step, just with a grace band.
+				var quantity = Math.max(1, Math.ceil(totalHours / tier.maxHours - 0.2));
+				var totalCost = quantity * tier.unitCost;
+				var totalRetail = quantity * tier.unitRetail;
+				return {
+					name: tier.name,
+					quantity: quantity,
+					unitCost: tier.unitCost,
+					unitRetail: tier.unitRetail,
+					totalCost: totalCost,
+					totalRetail: totalRetail
+				};
+			});
+
+			var options = rows.map(function (row) {
+				return {
+					value: row.name,
+					label: row.name + " \u2014 Qty " + row.quantity + " \u2014 " + formatMoney(row.totalRetail)
+				};
 			});
 			slaPicklistController.setOptions(options);
+
+			renderSLATable(rows, slaPicklistEl.dataset.value);
+		}
+
+		function renderSLATable(rows, selectedTierName) {
+			var tbody = document.getElementById("slaTableBody");
+			tbody.innerHTML = "";
+			rows.forEach(function (row) {
+				var tr = document.createElement("tr");
+				if (row.name === selectedTierName) {
+					tr.className = "selected-tier";
+				}
+				tr.innerHTML =
+					"<td>" + row.name + "</td>" +
+					"<td>" + row.quantity + "</td>" +
+					"<td>" + formatMoney(row.unitCost) + "</td>" +
+					"<td>" + formatMoney(row.unitRetail) + "</td>" +
+					"<td>" + formatMoney(row.totalCost) + "</td>" +
+					"<td>" + formatMoney(row.totalRetail) + "</td>";
+				tbody.appendChild(tr);
+			});
 		}
 
 		document.getElementById("submitPromptsBtn").addEventListener("click", function () {
