@@ -43,15 +43,20 @@
 
 		.header {
 			display: flex;
-			justify-content: space-between;
+			justify-content: center;
+			text-align: center;
 			gap: 16px;
-			align-items: flex-start;
+			align-items: center;
 			margin-bottom: 22px;
+			padding-bottom: 18px;
+			border-bottom: 2px solid #e5e7eb;
 		}
 
 		h1 {
 			margin: 0;
 			font-size: 28px;
+			color: #1e40af;
+			letter-spacing: 0.02em;
 		}
 
 		p {
@@ -526,6 +531,16 @@
 			var promptArea = document.getElementById("promptArea");
 			promptArea.classList.remove("hidden");
 			promptArea.innerHTML = "<p>Synced successfully. CRM ID: " + result.crmInstallPriceSheetID + "</p>";
+
+			var recordSummaryUrl = "https://creatorapp.zoho.com/tvspro/application-by-chris/record-summary/All_Price_Sheets/" + priceSheetID;
+
+			setTimeout(function () {
+				ZOHO.CREATOR.UTIL.navigateParentURL({
+					action: "open",
+					url: recordSummaryUrl,
+					window: "same"
+				});
+			}, 1500);
 		}
 
 		function showError(msg) {
